@@ -1,0 +1,21 @@
+<idea-plugin>
+
+    <id>com.tecknobit.dotDb</id>
+    <!--suppress PluginXmlCapitalization -->
+    <name>dotDb</name>
+    <vendor email="infotecknobitcompany@gmail.com" url="https://github.com/N7ghtm4r3">Tecknobit</vendor>
+
+    <description>
+        <![CDATA[
+            dotDb allows you to read your databases inside the IntelliJ IDEA window
+        ]]>
+    </description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceImplementation="com.tecknobit.dotdb.dotDbWindow"/>
+        <toolWindow factoryClass="com.tecknobit.dotdb.dotDbWindow" id="dotDb" anchor="right"/>
+    </extensions>
+
+</idea-plugin>
