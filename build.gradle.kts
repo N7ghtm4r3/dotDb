@@ -13,8 +13,13 @@ repositories {
 intellij {
     version.set("2022.1.4")
     type.set("IC") // Target IDE Platform
-
     plugins.set(listOf())
+}
+
+dependencies {
+
+    implementation("org.xerial:sqlite-jdbc:3.39.3.0")
+
 }
 
 tasks {
