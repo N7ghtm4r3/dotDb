@@ -1,5 +1,7 @@
 package com.tecknobit.dotdb;
 
+import com.intellij.openapi.application.Application;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.wm.ToolWindow;
@@ -10,26 +12,31 @@ import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.panels.HorizontalLayout;
 import com.intellij.ui.components.panels.VerticalLayout;
 import com.intellij.ui.table.JBTable;
-import kotlin.Pair;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static com.intellij.util.ui.JBUI.Borders.empty;
+import static com.tecknobit.dotdb.TableDetails.getTableDetails;
 import static java.awt.Font.DIALOG;
 import static java.awt.Font.PLAIN;
 import static java.sql.DriverManager.getConnection;
 
 public class dotDbWindow implements ToolWindowFactory {
 
-    public static ToolWindow toolWindow;
+    private static final Application APPLICATION = ApplicationManager.getApplication();
+
+    public static volatile ToolWindow toolWindow;
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
@@ -65,6 +72,8 @@ public class dotDbWindow implements ToolWindowFactory {
 
         private final ArrayList<String> tables;
 
+        private TableDetails currentTableDetails;
+
         public dotDbContent(String databaseFilePath) throws SQLException {
             this.databaseFilePath = databaseFilePath;
             contentPanel.setLayout(new VerticalLayout(10));
@@ -73,8 +82,7 @@ public class dotDbWindow implements ToolWindowFactory {
             initView();
         }
 
-        private void initView() throws SQLException {
-            loadCombobox();
+        private void initView() {
             ExecutorService executor = Executors.newSingleThreadExecutor();
             executor.execute(() -> {
                 while (true) {
@@ -86,8 +94,14 @@ public class dotDbWindow implements ToolWindowFactory {
                                 tables.addAll(nTables);
                                 if (!tables.contains(currentTableSelected))
                                     currentTableSelected = tables.get(0);
-                                loadCombobox();
                             }
+                            APPLICATION.invokeLater(() -> {
+                                try {
+                                    loadCombobox();
+                                } catch (SQLException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            });
                             Thread.sleep(500);
                         } catch (Exception e) {
                             throw new RuntimeException(e);
@@ -108,28 +122,30 @@ public class dotDbWindow implements ToolWindowFactory {
         }
 
         private void loadCombobox() throws SQLException {
-            if (comboPanel != null)
-                contentPanel.remove(comboPanel);
-            comboPanel = new JPanel();
-            comboPanel.setLayout(new VerticalLayout(10));
-            comboPanel.add(getHeaderTitle("Tables"));
-            ComboBox<String> tablesComboBox = new ComboBox<>(tables.toArray(new String[0]));
-            if (currentTableSelected == null)
-                currentTableSelected = tables.get(0);
-            tablesComboBox.setSelectedItem(currentTableSelected);
-            tablesComboBox.addActionListener(e -> {
-                try {
-                    currentTableSelected = (String) tablesComboBox.getSelectedItem();
-                    createTablePanel(currentTableSelected);
-                } catch (SQLException ex) {
-                    throw new RuntimeException(ex);
-                }
-            });
-            comboPanel.add(tablesComboBox);
-            refreshPanel(comboPanel);
-            contentPanel.add(comboPanel);
-            createTablePanel(currentTableSelected);
-            refreshPanel();
+            if (currentTableDetails == null || currentTableDetails.hasChanged(connection, currentTableSelected)) {
+                if (comboPanel != null)
+                    contentPanel.remove(comboPanel);
+                comboPanel = new JPanel();
+                comboPanel.setLayout(new VerticalLayout(10));
+                comboPanel.add(getHeaderTitle("Tables"));
+                ComboBox<String> tablesComboBox = new ComboBox<>(tables.toArray(new String[0]));
+                if (currentTableSelected == null)
+                    currentTableSelected = tables.get(0);
+                tablesComboBox.setSelectedItem(currentTableSelected);
+                tablesComboBox.addActionListener(e -> {
+                    try {
+                        currentTableSelected = (String) tablesComboBox.getSelectedItem();
+                        createTablePanel(currentTableSelected);
+                    } catch (SQLException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                });
+                comboPanel.add(tablesComboBox);
+                refreshPanel(comboPanel);
+                contentPanel.add(comboPanel);
+                createTablePanel(currentTableSelected);
+                refreshPanel();
+            }
         }
 
         private void createTablePanel(String table) throws SQLException {
@@ -138,7 +154,8 @@ public class dotDbWindow implements ToolWindowFactory {
             tablePanel = new JPanel();
             tablePanel.setLayout(new VerticalLayout(10));
             tablePanel.add(getHeaderTitle("Work with: " + table));
-            String[] columns = getTableDetails(table).getFirst();
+            currentTableDetails = getTableDetails(connection, table);
+            String[] columns = currentTableDetails.getColumns();
             final String[] fields = new String[columns.length + 1];
             fields[0] = ALL_FIELDS;
             System.arraycopy(columns, 0, fields, 1, columns.length);
@@ -193,11 +210,16 @@ public class dotDbWindow implements ToolWindowFactory {
                 tablePanel.remove(tablePane);
             while (connection.isClosed())
                 Thread.onSpinWait();
-            String query = "SELECT * FROM " + table;
-            Pair<String[], Integer> tableDetails = getTableDetails(table);
-            String[] columns = tableDetails.getFirst();
-            int columnsCount = tableDetails.getSecond();
+            JBTable tableView = new JBTable();
+            tableView.setRowSelectionAllowed(false);
+            tableView.setCellSelectionEnabled(true);
+            TableDetails lastTableChanged = currentTableDetails.getLastTableChanged();
+            String[] columns = lastTableChanged.getColumns();
+            int columnsCount = lastTableChanged.getColumnsCount();
+            DefaultTableModel model = new DefaultTableModel(columns, 0);
+            ArrayList<Object[]> content = new ArrayList<>();
             if (!fieldValue.isBlank()) {
+                String query;
                 if (field.equals(ALL_FIELDS)) {
                     StringBuilder fieldsQuery = new StringBuilder();
                     for (String column : columns) {
@@ -208,20 +230,22 @@ public class dotDbWindow implements ToolWindowFactory {
                     query = "SELECT * FROM " + table + " WHERE " + fieldsQuery;
                 } else
                     query = "SELECT * FROM " + table + " WHERE " + field + " LIKE '%" + fieldValue + "%'";
+                ResultSet rows = connection.createStatement().executeQuery(query);
+                while (rows.next()) {
+                    Object[] rowItems = new Object[columnsCount];
+                    for (int j = 1; j <= columnsCount; j++)
+                        rowItems[j - 1] = rows.getObject(j);
+                    model.addRow(rowItems);
+                    content.add(rowItems);
+                }
+                rows.close();
+                connection.close();
+            } else {
+                for (Object[] rowItems : lastTableChanged.getTableContent()) {
+                    model.addRow(rowItems);
+                    content.add(rowItems);
+                }
             }
-            JBTable tableView = new JBTable();
-            tableView.setRowSelectionAllowed(false);
-            tableView.setCellSelectionEnabled(true);
-            ResultSet rows = connection.createStatement().executeQuery(query);
-            DefaultTableModel model = new DefaultTableModel(columns, 0);
-            while (rows.next()) {
-                Object[] rowItems = new Object[columnsCount];
-                for (int j = 1; j <= columnsCount; j++)
-                    rowItems[j - 1] = rows.getObject(j);
-                model.addRow(rowItems);
-            }
-            rows.close();
-            connection.close();
             if (model.getRowCount() > 0) {
                 tableView.setModel(model);
                 tablePane = new JBScrollPane(tableView) {
@@ -235,18 +259,9 @@ public class dotDbWindow implements ToolWindowFactory {
                 tablePanel.add(tablePane);
                 refreshPanel(tablePanel);
             }
+            currentTableDetails = new TableDetails(columns, columnsCount, content);
             contentPanel.add(tablePanel);
             refreshPanel();
-        }
-
-        private Pair<String[], Integer> getTableDetails(String table) throws SQLException {
-            ResultSet rows = connection.createStatement().executeQuery("SELECT * FROM " + table);
-            ResultSetMetaData metaData = rows.getMetaData();
-            int columnsCount = metaData.getColumnCount();
-            String[] columns = new String[columnsCount];
-            for (int j = 1; j <= columnsCount; j++)
-                columns[j - 1] = metaData.getColumnName(j);
-            return new Pair<>(columns, columnsCount);
         }
 
         /**
