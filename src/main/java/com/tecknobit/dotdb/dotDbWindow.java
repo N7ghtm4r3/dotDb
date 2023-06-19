@@ -9,7 +9,6 @@ import com.intellij.ui.SearchTextField;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.panels.HorizontalLayout;
 import com.intellij.ui.components.panels.VerticalLayout;
-import com.intellij.ui.content.Content;
 import com.intellij.ui.table.JBTable;
 import kotlin.Pair;
 import org.jetbrains.annotations.NotNull;
@@ -22,7 +21,6 @@ import java.awt.event.ItemListener;
 import java.sql.*;
 import java.util.ArrayList;
 
-import static com.intellij.ui.content.ContentFactory.SERVICE.getInstance;
 import static com.intellij.util.ui.JBUI.Borders.empty;
 import static java.awt.Font.DIALOG;
 import static java.awt.Font.PLAIN;
@@ -30,19 +28,21 @@ import static java.sql.DriverManager.getConnection;
 
 public class dotDbWindow implements ToolWindowFactory {
 
+    public static ToolWindow toolWindow;
+
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         try {
             Class.forName("org.sqlite.JDBC");
-            dotDbContent content = new dotDbContent();
-            Content iContent = getInstance().createContent(content.getContentPanel(), "", false);
-            toolWindow.getContentManager().addContent(iContent);
+            if (dotDbWindow.toolWindow == null)
+                toolWindow.hide();
+            dotDbWindow.toolWindow = toolWindow;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static class dotDbContent {
+    public static class dotDbContent {
 
         private static final String ALL_FIELDS = "All fields";
 
@@ -56,12 +56,16 @@ public class dotDbWindow implements ToolWindowFactory {
 
         private JBScrollPane tablePane;
 
-        public dotDbContent() throws SQLException {
+        public dotDbContent(String databaseFilePath) throws SQLException {
             contentPanel.setLayout(new VerticalLayout(10));
             contentPanel.setBorder(empty(10));
-            // TODO: 18/06/2023 TO CHANGE WITH DYNAMIC PATH
-            connection = getConnection("jdbc:sqlite:C:\\Users\\utente\\Desktop\\Tecknobit\\Dependencies\\Plugins\\Demo\\JavaDockyDemo\\gstorage.db");
+            connection = getConnection("jdbc:sqlite:" + databaseFilePath);
             tables = new ArrayList<>();
+            initView();
+        }
+
+        private void initView() throws SQLException {
+            tables.clear();
             getTables();
             loadCombobox();
         }
@@ -82,12 +86,11 @@ public class dotDbWindow implements ToolWindowFactory {
                     createTablePanel(e.getItem().toString());
                 } catch (SQLException ex) {
                     throw new RuntimeException(ex);
-                } finally {
-                    refreshContentPanel();
                 }
             }));
+            refreshPanel(comboPanel);
             contentPanel.add(comboPanel);
-            refreshContentPanel();
+            refreshPanel();
         }
 
         private void createTablePanel(String table) throws SQLException {
@@ -106,8 +109,7 @@ public class dotDbWindow implements ToolWindowFactory {
             ComboBox<String> fieldComboBox = createComboBox(fields, e -> {
                 states[0] = e.getItem().toString();
                 try {
-                    if (!states[1].isBlank())
-                        createTableView(table, states[0], states[1]);
+                    createTableView(table, states[0], states[1]);
                 } catch (SQLException ex) {
                     throw new RuntimeException(ex);
                 }
@@ -132,17 +134,18 @@ public class dotDbWindow implements ToolWindowFactory {
             searchPanel.add(searchTextField);
             JButton clearBnt = new JButton("CLEAR");
             clearBnt.addActionListener(e -> {
-                searchTextField.setText("");
-                fieldComboBox.setSelectedIndex(0);
-                try {
-                    createTableView(table, ALL_FIELDS, "");
-                } catch (SQLException ex) {
-                    throw new RuntimeException(ex);
-                } finally {
-                    refreshContentPanel();
+                if (!states[0].equals(ALL_FIELDS) || !states[1].isEmpty()) {
+                    searchTextField.setText("");
+                    fieldComboBox.setSelectedIndex(0);
+                    try {
+                        createTableView(table, ALL_FIELDS, "");
+                    } catch (SQLException ex) {
+                        throw new RuntimeException(ex);
+                    }
                 }
             });
             searchPanel.add(clearBnt);
+            refreshPanel(searchPanel);
             tablePanel.add(searchPanel);
             createTableView(table, ALL_FIELDS, "");
         }
@@ -188,9 +191,10 @@ public class dotDbWindow implements ToolWindowFactory {
                     }
                 };
                 tablePanel.add(tablePane);
+                refreshPanel(tablePanel);
             }
             contentPanel.add(tablePanel);
-            refreshContentPanel();
+            refreshPanel();
         }
 
         private Pair<String[], Integer> getTableDetails(String table) throws SQLException {
@@ -242,9 +246,13 @@ public class dotDbWindow implements ToolWindowFactory {
             return new Font(font, PLAIN, size);
         }
 
-        private void refreshContentPanel() {
-            contentPanel.requestFocus();
-            contentPanel.invalidate();
+        private void refreshPanel() {
+            refreshPanel(contentPanel);
+        }
+
+        private void refreshPanel(JPanel panel) {
+            panel.validate();
+            panel.repaint();
         }
 
         public JBScrollPane getContentPanel() {

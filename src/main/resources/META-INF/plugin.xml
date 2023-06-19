@@ -7,7 +7,7 @@
 
     <description>
         <![CDATA[
-            dotDb allows you to read your databases inside the IntelliJ IDEA window
+            dotDb is a real-time database reader that allows you to see your databases in the IntelliJ IDEA's window
         ]]>
     </description>
 
@@ -17,5 +17,12 @@
         <applicationService serviceImplementation="com.tecknobit.dotdb.dotDbWindow"/>
         <toolWindow factoryClass="com.tecknobit.dotdb.dotDbWindow" id="dotDb" anchor="right"/>
     </extensions>
+
+    <actions>
+        <action id="dotDbExecutor" class="com.tecknobit.dotdb.dotDbExecutor" text="Open in dotDb">
+            <add-to-group group-id="ProjectViewPopupMenu" relative-to-action="OpenInBrowserGroup" anchor="before"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="shift G" replace-all="true"/>
+        </action>
+    </actions>
 
 </idea-plugin>
