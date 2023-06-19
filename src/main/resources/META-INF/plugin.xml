@@ -15,7 +15,8 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="com.tecknobit.dotdb.dotDbWindow"/>
-        <toolWindow factoryClass="com.tecknobit.dotdb.dotDbWindow" id="dotDb" anchor="right"/>
+        <toolWindow factoryClass="com.tecknobit.dotdb.dotDbWindow" id="dotDb" anchor="right"
+                    doNotActivateOnStart="false"/>
     </extensions>
 
     <actions>
