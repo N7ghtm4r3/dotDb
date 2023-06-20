@@ -1,15 +1,31 @@
 <idea-plugin>
 
     <id>com.tecknobit.dotDb</id>
+    <version>1.0.0</version>
     <!--suppress PluginXmlCapitalization -->
     <name>dotDb</name>
     <vendor email="infotecknobitcompany@gmail.com" url="https://github.com/N7ghtm4r3">Tecknobit</vendor>
 
     <description>
         <![CDATA[
-            dotDb is a real-time database reader that allows you to see your databases in the IntelliJ IDEA's window
+            dotDb is a real-time database reader that lets you see your databases in the JetBrains IDE window
         ]]>
     </description>
+
+    <change-notes>
+        <![CDATA[
+            <h1>v. 1.0.0</h1><br>
+            The first version of dotDb released!
+            <ul>
+                <li>
+                    Read your databases directly in a window of your IDE
+                </li>
+                <li>
+                    Update your database data directly in a window of your IDE
+                </li>
+            </ul>
+        ]]>
+    </change-notes>
 
     <depends>com.intellij.modules.platform</depends>
 

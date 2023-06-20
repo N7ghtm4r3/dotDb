@@ -4,6 +4,7 @@ import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBox;
+import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
 import com.intellij.ui.DocumentAdapter;
@@ -32,12 +33,31 @@ import static java.awt.Font.DIALOG;
 import static java.awt.Font.PLAIN;
 import static java.sql.DriverManager.getConnection;
 
+/**
+ * The {@code dotDbWindow} class is useful to manage the {@code dotDb}'s view where the user can edit and work on own
+ * databases
+ *
+ * @author N7ghtm4r3 - Tecknobit
+ * @see ToolWindowFactory
+ **/
 public class dotDbWindow implements ToolWindowFactory {
 
+    /**
+     * {@code APPLICATION} instance to manage the IDE Thread model and the graphic components
+     */
     private static final Application APPLICATION = ApplicationManager.getApplication();
 
+    /**
+     * {@code toolWindow} window where set the content
+     */
     public static volatile ToolWindow toolWindow;
 
+    /**
+     * Method to create the tool window to insert the plugin UI
+     *
+     * @param project:    the current project
+     * @param toolWindow: toolwindow where set the content
+     */
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         try {
@@ -50,32 +70,86 @@ public class dotDbWindow implements ToolWindowFactory {
         }
     }
 
+    /**
+     * The {@code dotDbContent} class is useful to manage the plugin's UI content and manage the database
+     *
+     * @author N7ghtm4r3 - Tecknobit
+     */
     public static class dotDbContent {
 
+        /**
+         * {@code ALL_FIELDS} option for the fields {@link ComboBox}
+         */
         private static final String ALL_FIELDS = "All fields";
 
+        /**
+         * {@code states} to manage the search filter:
+         * <ul>
+         *     <li>
+         *         states[0] -> field to filter the search
+         *     </li>
+         *     <li>
+         *         states[1] -> value of the query to search
+         *     </li>
+         * </ul>
+         */
         private final String[] states = {ALL_FIELDS, ""};
 
+        /**
+         * {@code contentPanel} main panel to contain the UI
+         */
         private final JPanel contentPanel = new JPanel();
 
+        /**
+         * {@code databaseFilePath} the database file path of the database to show
+         */
         private final String databaseFilePath;
 
+        /**
+         * {@code tablePanel} panel to contain the table view of the database
+         */
         private JPanel tablePanel;
 
+        /**
+         * {@code comboPanel} panel to contain the view of the tables of the database
+         */
         private JPanel comboPanel;
 
+        /**
+         * {@code currentTableSelected} the current table name selected
+         */
         private String currentTableSelected;
 
+        /**
+         * {@code tablePane} panel to make scrollable the {@link #tablePanel}
+         */
         private JBScrollPane tablePane;
 
+        /**
+         * {@code connection} instance to manage the connection with the database chosen
+         */
         private Connection connection;
 
+        /**
+         * {@code tables} list of tables of the database to show
+         */
         private final ArrayList<String> tables;
 
+        /**
+         * {@code currentTableDetails} the current table details in base of {@link #currentTableSelected}
+         */
         private TableDetails currentTableDetails;
 
+        /**
+         * {@code query} the query to execute to refresh the UI with the refreshed database
+         */
         private String query;
 
+        /**
+         * Constructor to init a {@link dotDbContent} object
+         *
+         * @param databaseFilePath: the database file path of the database to show
+         */
         public dotDbContent(String databaseFilePath) throws SQLException {
             this.databaseFilePath = databaseFilePath;
             contentPanel.setLayout(new VerticalLayout(10));
@@ -84,6 +158,10 @@ public class dotDbWindow implements ToolWindowFactory {
             initView();
         }
 
+        /**
+         * Method to init and keep the UI updated almost in real-time (there is a refresh time of 0.5 seconds each lap) <br>
+         * No-any params required
+         */
         private void initView() {
             ExecutorService executor = Executors.newSingleThreadExecutor();
             executor.execute(() -> {
@@ -116,6 +194,12 @@ public class dotDbWindow implements ToolWindowFactory {
             });
         }
 
+        /**
+         * Method to get the tables of the database to show <br>
+         * No-any params required
+         *
+         * @return tables of the database as {@link ArrayList} as {@link String}
+         */
         private ArrayList<String> getTables() throws SQLException {
             ArrayList<String> tables = new ArrayList<>();
             connection = getConnection("jdbc:sqlite:" + databaseFilePath);
@@ -126,6 +210,10 @@ public class dotDbWindow implements ToolWindowFactory {
             return tables;
         }
 
+        /**
+         * Method to load the combobox with the {@link #tables} of the database to show <br>
+         * No-any params required
+         */
         private void loadCombobox() throws SQLException {
             while (connection.isClosed())
                 Thread.onSpinWait();
@@ -135,13 +223,13 @@ public class dotDbWindow implements ToolWindowFactory {
                 comboPanel = new JPanel();
                 comboPanel.setLayout(new VerticalLayout(10));
                 comboPanel.add(getHeaderTitle("Tables"));
-                ComboBox<String> tablesComboBox = new ComboBox<>(tables.toArray(new String[0]));
                 if (currentTableSelected == null) {
                     currentTableSelected = tables.get(0);
                     query = getBaseQuery();
                 }
                 if (currentTableDetails == null)
                     initCurrentTable();
+                ComboBox<String> tablesComboBox = new ComboBox<>(tables.toArray(new String[0]));
                 tablesComboBox.setSelectedItem(currentTableSelected);
                 tablesComboBox.addActionListener(e -> {
                     try {
@@ -162,6 +250,10 @@ public class dotDbWindow implements ToolWindowFactory {
             }
         }
 
+        /**
+         * Method to create the table panel and the search panel to filter the records of the database to show <br>
+         * No-any params required
+         */
         private void createTablePanel() throws SQLException {
             if (tablePanel != null)
                 contentPanel.remove(tablePanel);
@@ -226,6 +318,12 @@ public class dotDbWindow implements ToolWindowFactory {
             createTableView();
         }
 
+        /**
+         * Method to create the table view where place the database to show <br>
+         * No-any params required
+         *
+         * @apiNote you can edit the cells value to make an UPDATE on the database
+         */
         private void createTableView() throws SQLException {
             if (tablePane != null)
                 tablePanel.remove(tablePane);
@@ -236,6 +334,21 @@ public class dotDbWindow implements ToolWindowFactory {
             tableView.setCellSelectionEnabled(true);
             String[] columns = currentTableDetails.getColumns();
             DefaultTableModel model = new DefaultTableModel(columns, 0);
+            model.addTableModelListener(e -> {
+                int column = e.getColumn();
+                int row = e.getFirstRow();
+                if (column > -1) {
+                    try {
+                        while (connection.isClosed())
+                            Thread.onSpinWait();
+                        connection.prepareStatement(currentTableDetails.getUpdateQuery(currentTableSelected, column, row,
+                                model.getValueAt(row, column))).executeUpdate();
+                    } catch (SQLException ex) {
+                        Messages.showErrorDialog(ex.getLocalizedMessage(), "Error During the Update");
+                    }
+                }
+            });
+            query = getBaseQuery();
             if (!states[1].isBlank()) {
                 if (states[0].equals(ALL_FIELDS)) {
                     StringBuilder fieldsQuery = new StringBuilder();
@@ -244,11 +357,10 @@ public class dotDbWindow implements ToolWindowFactory {
                             fieldsQuery.append("OR ");
                         fieldsQuery.append(column).append(" LIKE '%").append(states[1]).append("%' ");
                     }
-                    query = getBaseQuery() + " WHERE " + fieldsQuery;
+                    query += " WHERE " + fieldsQuery;
                 } else
-                    query = getBaseQuery() + " WHERE " + states[0] + " LIKE '%" + states[1] + "%'";
-            } else
-                query = getBaseQuery();
+                    query += " WHERE " + states[0] + " LIKE '%" + states[1] + "%'";
+            }
             for (Object[] rowItems : currentTableDetails.getTableContent(query))
                 model.addRow(rowItems);
             if (model.getRowCount() > 0) {
@@ -267,10 +379,20 @@ public class dotDbWindow implements ToolWindowFactory {
             refreshPanel();
         }
 
+        /**
+         * Method to init the {@link #currentTableDetails} to correctly perform the plugin's workflow <br>
+         * No-any params required
+         */
         private void initCurrentTable() throws SQLException {
             currentTableDetails = getTableDetails(query, connection);
         }
 
+        /**
+         * Method to get the base query <br>
+         * No-any params required
+         *
+         * @return base query as {@link String}
+         */
         private String getBaseQuery() {
             return "SELECT * FROM " + currentTableSelected;
         }
@@ -283,40 +405,34 @@ public class dotDbWindow implements ToolWindowFactory {
          */
         private JLabel getHeaderTitle(String title) {
             JLabel lTitle = new JLabel(title);
-            lTitle.setFont(getFontText(20));
+            lTitle.setFont(new Font(DIALOG, PLAIN, 20));
             return lTitle;
         }
 
         /**
-         * Method to get the font for a {@link JComponent}
-         *
-         * @param size: size of the text
-         * @return font as {@link Font}
+         * Method to refresh the UI of the {@link #contentPanel} <br>
+         * No-any params required
          */
-        private Font getFontText(int size) {
-            return getFontText(DIALOG, size);
-        }
-
-        /**
-         * Method to get the font for a {@link JComponent}
-         *
-         * @param font: font to use
-         * @param size: size of the text
-         * @return font as {@link Font}
-         */
-        private Font getFontText(String font, int size) {
-            return new Font(font, PLAIN, size);
-        }
-
         private void refreshPanel() {
             refreshPanel(contentPanel);
         }
 
+        /**
+         * Method to refresh the UI of a panel
+         *
+         * @param panel: the panel to refresh
+         */
         private void refreshPanel(JPanel panel) {
             panel.validate();
             panel.repaint();
         }
 
+        /**
+         * Method to get {@link #contentPanel} instance <br>
+         * No-any params required
+         *
+         * @return {@link #contentPanel} instance as {@link JBScrollPane} to make it scrollable
+         */
         public JBScrollPane getContentPanel() {
             return new JBScrollPane(contentPanel);
         }

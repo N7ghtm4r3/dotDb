@@ -15,8 +15,19 @@ import static com.tecknobit.dotdb.dotDbWindow.dotDbContent;
 import static com.tecknobit.dotdb.dotDbWindow.toolWindow;
 import static java.util.List.of;
 
+/**
+ * The {@code dotDbExecutor} class is useful to execute the {@code dotDb}'s plugin
+ *
+ * @author N7ghtm4r3 - Tecknobit
+ * @apiNote you can use the macro-shortcut {@code Maiusc + G} or the right-click on the database file you want to choose
+ * and the {@link dotDbWindow} will show the {@link dotDbContent}
+ * @see AnAction
+ */
 public class dotDbExecutor extends AnAction {
 
+    /**
+     * {@code SUPPORTED_EXTENSIONS} list of supported database file extensions
+     */
     private static final ArrayList<String> SUPPORTED_EXTENSIONS = new ArrayList<>(of("sqlite", "sqlite3", "db", "db3",
             "s3db", "sl3"));
 
