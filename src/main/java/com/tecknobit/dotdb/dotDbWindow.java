@@ -74,6 +74,8 @@ public class dotDbWindow implements ToolWindowFactory {
 
         private TableDetails currentTableDetails;
 
+        private String query;
+
         public dotDbContent(String databaseFilePath) throws SQLException {
             this.databaseFilePath = databaseFilePath;
             contentPanel.setLayout(new VerticalLayout(10));
@@ -92,8 +94,11 @@ public class dotDbWindow implements ToolWindowFactory {
                             if (!tables.equals(nTables)) {
                                 tables.clear();
                                 tables.addAll(nTables);
-                                if (!tables.contains(currentTableSelected))
+                                if (!tables.contains(currentTableSelected)) {
                                     currentTableSelected = tables.get(0);
+                                    query = getBaseQuery();
+                                }
+                                currentTableDetails = null;
                             }
                             APPLICATION.invokeLater(() -> {
                                 try {
@@ -122,20 +127,29 @@ public class dotDbWindow implements ToolWindowFactory {
         }
 
         private void loadCombobox() throws SQLException {
-            if (currentTableDetails == null || currentTableDetails.hasChanged(connection, currentTableSelected)) {
+            while (connection.isClosed())
+                Thread.onSpinWait();
+            if (currentTableDetails == null || currentTableDetails.hasChanged(connection, query)) {
                 if (comboPanel != null)
                     contentPanel.remove(comboPanel);
                 comboPanel = new JPanel();
                 comboPanel.setLayout(new VerticalLayout(10));
                 comboPanel.add(getHeaderTitle("Tables"));
                 ComboBox<String> tablesComboBox = new ComboBox<>(tables.toArray(new String[0]));
-                if (currentTableSelected == null)
+                if (currentTableSelected == null) {
                     currentTableSelected = tables.get(0);
+                    query = getBaseQuery();
+                }
+                if (currentTableDetails == null)
+                    initCurrentTable();
                 tablesComboBox.setSelectedItem(currentTableSelected);
                 tablesComboBox.addActionListener(e -> {
                     try {
+                        states[0] = ALL_FIELDS;
+                        states[1] = "";
                         currentTableSelected = (String) tablesComboBox.getSelectedItem();
-                        createTablePanel(currentTableSelected);
+                        initCurrentTable();
+                        createTablePanel();
                     } catch (SQLException ex) {
                         throw new RuntimeException(ex);
                     }
@@ -143,18 +157,17 @@ public class dotDbWindow implements ToolWindowFactory {
                 comboPanel.add(tablesComboBox);
                 refreshPanel(comboPanel);
                 contentPanel.add(comboPanel);
-                createTablePanel(currentTableSelected);
+                createTablePanel();
                 refreshPanel();
             }
         }
 
-        private void createTablePanel(String table) throws SQLException {
+        private void createTablePanel() throws SQLException {
             if (tablePanel != null)
                 contentPanel.remove(tablePanel);
             tablePanel = new JPanel();
             tablePanel.setLayout(new VerticalLayout(10));
-            tablePanel.add(getHeaderTitle("Work with: " + table));
-            currentTableDetails = getTableDetails(connection, table);
+            tablePanel.add(getHeaderTitle("Work with: " + currentTableSelected));
             String[] columns = currentTableDetails.getColumns();
             final String[] fields = new String[columns.length + 1];
             fields[0] = ALL_FIELDS;
@@ -162,22 +175,24 @@ public class dotDbWindow implements ToolWindowFactory {
             JPanel searchPanel = new JPanel();
             searchPanel.setLayout(new HorizontalLayout(10));
             ComboBox<String> fieldsComboBox = new ComboBox<>(fields);
+            fieldsComboBox.setSelectedItem(states[0]);
             fieldsComboBox.addActionListener(e -> {
                 states[0] = (String) fieldsComboBox.getSelectedItem();
                 try {
-                    createTableView(table, states[0], states[1]);
+                    createTableView();
                 } catch (SQLException ex) {
                     throw new RuntimeException(ex);
                 }
             });
             searchPanel.add(fieldsComboBox);
             SearchTextField searchTextField = new SearchTextField(false);
+            searchTextField.setText(states[1]);
             searchTextField.addDocumentListener(new DocumentAdapter() {
                 @Override
                 protected void textChanged(@NotNull DocumentEvent e) {
                     try {
                         states[1] = searchTextField.getText();
-                        createTableView(table, states[0], states[1]);
+                        createTableView();
                     } catch (Exception ex) {
                         states[1] = "";
                     } finally {
@@ -186,6 +201,12 @@ public class dotDbWindow implements ToolWindowFactory {
                 }
             });
             searchPanel.add(searchTextField);
+            APPLICATION.invokeLater(() -> {
+                if (!states[1].isBlank()) {
+                    searchTextField.grabFocus();
+                    searchTextField.requestFocusInWindow();
+                }
+            });
             JButton clearBnt = new JButton("CLEAR");
             clearBnt.addActionListener(e -> {
                 if (!states[0].equals(ALL_FIELDS) || !states[1].isEmpty()) {
@@ -193,7 +214,7 @@ public class dotDbWindow implements ToolWindowFactory {
                     fieldsComboBox.setSelectedIndex(0);
                     states[1] = "";
                     try {
-                        createTableView(table, ALL_FIELDS, "");
+                        createTableView();
                     } catch (SQLException ex) {
                         throw new RuntimeException(ex);
                     }
@@ -202,10 +223,10 @@ public class dotDbWindow implements ToolWindowFactory {
             searchPanel.add(clearBnt);
             refreshPanel(searchPanel);
             tablePanel.add(searchPanel);
-            createTableView(table, ALL_FIELDS, "");
+            createTableView();
         }
 
-        private void createTableView(String table, String field, String fieldValue) throws SQLException {
+        private void createTableView() throws SQLException {
             if (tablePane != null)
                 tablePanel.remove(tablePane);
             while (connection.isClosed())
@@ -213,55 +234,45 @@ public class dotDbWindow implements ToolWindowFactory {
             JBTable tableView = new JBTable();
             tableView.setRowSelectionAllowed(false);
             tableView.setCellSelectionEnabled(true);
-            TableDetails lastTableChanged = currentTableDetails.getLastTableChanged();
-            String[] columns = lastTableChanged.getColumns();
-            int columnsCount = lastTableChanged.getColumnsCount();
+            String[] columns = currentTableDetails.getColumns();
             DefaultTableModel model = new DefaultTableModel(columns, 0);
-            ArrayList<Object[]> content = new ArrayList<>();
-            if (!fieldValue.isBlank()) {
-                String query;
-                if (field.equals(ALL_FIELDS)) {
+            if (!states[1].isBlank()) {
+                if (states[0].equals(ALL_FIELDS)) {
                     StringBuilder fieldsQuery = new StringBuilder();
                     for (String column : columns) {
                         if (fieldsQuery.length() > 0)
                             fieldsQuery.append("OR ");
-                        fieldsQuery.append(column).append(" LIKE '%").append(fieldValue).append("%' ");
+                        fieldsQuery.append(column).append(" LIKE '%").append(states[1]).append("%' ");
                     }
-                    query = "SELECT * FROM " + table + " WHERE " + fieldsQuery;
+                    query = getBaseQuery() + " WHERE " + fieldsQuery;
                 } else
-                    query = "SELECT * FROM " + table + " WHERE " + field + " LIKE '%" + fieldValue + "%'";
-                ResultSet rows = connection.createStatement().executeQuery(query);
-                while (rows.next()) {
-                    Object[] rowItems = new Object[columnsCount];
-                    for (int j = 1; j <= columnsCount; j++)
-                        rowItems[j - 1] = rows.getObject(j);
-                    model.addRow(rowItems);
-                    content.add(rowItems);
-                }
-                rows.close();
-                connection.close();
-            } else {
-                for (Object[] rowItems : lastTableChanged.getTableContent()) {
-                    model.addRow(rowItems);
-                    content.add(rowItems);
-                }
-            }
+                    query = getBaseQuery() + " WHERE " + states[0] + " LIKE '%" + states[1] + "%'";
+            } else
+                query = getBaseQuery();
+            for (Object[] rowItems : currentTableDetails.getTableContent(query))
+                model.addRow(rowItems);
             if (model.getRowCount() > 0) {
                 tableView.setModel(model);
                 tablePane = new JBScrollPane(tableView) {
                     @Override
                     public Dimension getPreferredSize() {
-                        // TODO: 18/06/2023 TO CHECK\
-                        int height = tableView.getPreferredSize().height;
-                        return new Dimension(100, height + tableView.getRowHeight() + 5);
+                        return new Dimension(100, tableView.getPreferredSize().height +
+                                tableView.getRowHeight() + 5);
                     }
                 };
                 tablePanel.add(tablePane);
                 refreshPanel(tablePanel);
             }
-            currentTableDetails = new TableDetails(columns, columnsCount, content);
             contentPanel.add(tablePanel);
             refreshPanel();
+        }
+
+        private void initCurrentTable() throws SQLException {
+            currentTableDetails = getTableDetails(query, connection);
+        }
+
+        private String getBaseQuery() {
+            return "SELECT * FROM " + currentTableSelected;
         }
 
         /**
