@@ -1,7 +1,7 @@
 <idea-plugin>
 
     <id>com.tecknobit.dotDb</id>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <!--suppress PluginXmlCapitalization -->
     <name>dotDb</name>
     <vendor email="infotecknobitcompany@gmail.com" url="https://github.com/N7ghtm4r3">Tecknobit</vendor>
@@ -22,6 +22,16 @@
                 </li>
                 <li>
                     Update your database data directly in a window of your IDE
+                </li>
+            </ul>
+            <h1>v. 1.0.1</h1><br>
+            In this version
+            <ul>
+                <li>
+                    Fixed some issues of the database management from the plugin's window
+                </li>
+                <li>
+                    Added the DETACH button to clear the current window
                 </li>
             </ul>
         ]]>

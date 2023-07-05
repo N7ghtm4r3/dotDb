@@ -117,11 +117,13 @@ public class TableDetails {
         StringBuilder whereConditions = new StringBuilder();
         Object[] contents = tableContent.get(row);
         for (int j = 0; j < contents.length; j++) {
-            if (whereConditions.length() == 0)
-                whereConditions.append("' WHERE ");
-            else
-                whereConditions.append(" AND ");
-            whereConditions.append(columns[j]).append("='").append(contents[j]).append("'");
+            if (contents[j] != null) {
+                if (whereConditions.length() == 0)
+                    whereConditions.append("' WHERE ");
+                else
+                    whereConditions.append(" AND ");
+                whereConditions.append(columns[j]).append("='").append(contents[j]).append("'");
+            }
         }
         return "UPDATE " + tableName + " SET " + columns[column] + "='" + updateValue + whereConditions;
     }

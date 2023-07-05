@@ -38,8 +38,15 @@ public class dotDbExecutor extends AnAction {
      */
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
+        if (toolWindow == null) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        }
         VirtualFile file = e.getData(VIRTUAL_FILE);
-        if (file != null && toolWindow != null) {
+        if (file != null) {
             if (SUPPORTED_EXTENSIONS.contains(file.getExtension())) {
                 try {
                     ContentManager contentManager = toolWindow.getContentManager();

@@ -1,10 +1,10 @@
 plugins {
     id("java")
-    id("org.jetbrains.intellij") version "1.14.1"
+    id("org.jetbrains.intellij") version "1.14.2"
 }
 
 group = "com.tecknobit"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()

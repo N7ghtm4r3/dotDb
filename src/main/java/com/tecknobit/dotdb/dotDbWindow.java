@@ -19,6 +19,8 @@ import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -31,6 +33,7 @@ import static com.intellij.util.ui.JBUI.Borders.empty;
 import static com.tecknobit.dotdb.TableDetails.getTableDetails;
 import static java.awt.Font.DIALOG;
 import static java.awt.Font.PLAIN;
+import static java.lang.Thread.sleep;
 import static java.sql.DriverManager.getConnection;
 
 /**
@@ -145,6 +148,10 @@ public class dotDbWindow implements ToolWindowFactory {
          */
         private String query;
 
+        private volatile boolean updatingTable;
+
+        private volatile boolean tableHasFocus;
+
         /**
          * Constructor to init a {@link dotDbContent} object
          *
@@ -153,6 +160,7 @@ public class dotDbWindow implements ToolWindowFactory {
         public dotDbContent(String databaseFilePath) throws SQLException {
             this.databaseFilePath = databaseFilePath;
             contentPanel.setLayout(new VerticalLayout(10));
+            tableHasFocus = true;
             contentPanel.setBorder(empty(10));
             tables = getTables();
             initView();
@@ -165,9 +173,20 @@ public class dotDbWindow implements ToolWindowFactory {
         private void initView() {
             ExecutorService executor = Executors.newSingleThreadExecutor();
             executor.execute(() -> {
+                int times = 0;
                 while (true) {
                     if (toolWindow.isVisible()) {
                         try {
+                            if (updatingTable) {
+                                if (times == 10) {
+                                    updatingTable = false;
+                                    tableHasFocus = true;
+                                    contentPanel.requestFocus();
+                                    times = 0;
+                                } else
+                                    times++;
+                            } else
+                                times = 0;
                             ArrayList<String> nTables = getTables();
                             if (!tables.equals(nTables)) {
                                 tables.clear();
@@ -185,11 +204,12 @@ public class dotDbWindow implements ToolWindowFactory {
                                     throw new RuntimeException(e);
                                 }
                             });
-                            Thread.sleep(500);
+                            sleep(500);
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }
-                    }
+                    } else
+                        Thread.onSpinWait();
                 }
             });
         }
@@ -217,11 +237,10 @@ public class dotDbWindow implements ToolWindowFactory {
         private void loadCombobox() throws SQLException {
             while (connection.isClosed())
                 Thread.onSpinWait();
-            if (currentTableDetails == null || currentTableDetails.hasChanged(connection, query)) {
+            if ((currentTableDetails == null || currentTableDetails.hasChanged(connection, query)) && !updatingTable) {
                 if (comboPanel != null)
                     contentPanel.remove(comboPanel);
-                comboPanel = new JPanel();
-                comboPanel.setLayout(new VerticalLayout(10));
+                comboPanel = new JPanel(new VerticalLayout(10));
                 comboPanel.add(getHeaderTitle("Tables"));
                 if (currentTableSelected == null) {
                     currentTableSelected = tables.get(0);
@@ -229,7 +248,13 @@ public class dotDbWindow implements ToolWindowFactory {
                 }
                 if (currentTableDetails == null)
                     initCurrentTable();
-                ComboBox<String> tablesComboBox = new ComboBox<>(tables.toArray(new String[0]));
+                JPanel headPanel = new JPanel(new HorizontalLayout(10));
+                ComboBox<String> tablesComboBox = new ComboBox<>(tables.toArray(new String[0])) {
+                    @Override
+                    public Dimension getPreferredSize() {
+                        return new Dimension(307, getHeight());
+                    }
+                };
                 tablesComboBox.setSelectedItem(currentTableSelected);
                 tablesComboBox.addActionListener(e -> {
                     try {
@@ -242,7 +267,19 @@ public class dotDbWindow implements ToolWindowFactory {
                         throw new RuntimeException(ex);
                     }
                 });
-                comboPanel.add(tablesComboBox);
+                headPanel.add(tablesComboBox);
+                JButton detachBtn = new JButton("DETACH");
+                detachBtn.addActionListener(e -> {
+                    try {
+                        connection.close();
+                        toolWindow.getContentManager().removeAllContents(true);
+                    } catch (SQLException ex) {
+                        Messages.showErrorDialog(ex.getLocalizedMessage(), "Error During the Closing");
+                    }
+                });
+                headPanel.add(detachBtn);
+                refreshPanel(headPanel);
+                comboPanel.add(headPanel);
                 refreshPanel(comboPanel);
                 contentPanel.add(comboPanel);
                 createTablePanel();
@@ -334,6 +371,21 @@ public class dotDbWindow implements ToolWindowFactory {
             tableView.setCellSelectionEnabled(true);
             String[] columns = currentTableDetails.getColumns();
             DefaultTableModel model = new DefaultTableModel(columns, 0);
+            tableView.addFocusListener(new FocusListener() {
+                @Override
+                public void focusGained(FocusEvent e) {
+                    if (tableHasFocus)
+                        updatingTable = true;
+                    else {
+                        tableHasFocus = true;
+                        contentPanel.requestFocus();
+                    }
+                }
+
+                @Override
+                public void focusLost(FocusEvent e) {
+                }
+            });
             model.addTableModelListener(e -> {
                 int column = e.getColumn();
                 int row = e.getFirstRow();
@@ -341,8 +393,12 @@ public class dotDbWindow implements ToolWindowFactory {
                     try {
                         while (connection.isClosed())
                             Thread.onSpinWait();
-                        connection.prepareStatement(currentTableDetails.getUpdateQuery(currentTableSelected, column, row,
-                                model.getValueAt(row, column))).executeUpdate();
+                        if (connection.prepareStatement("PRAGMA busy_timeout = 1000").execute()) {
+                            connection.prepareStatement(currentTableDetails.getUpdateQuery(currentTableSelected, column,
+                                    row, model.getValueAt(row, column))).executeUpdate();
+                            updatingTable = false;
+                            tableHasFocus = false;
+                        }
                     } catch (SQLException ex) {
                         Messages.showErrorDialog(ex.getLocalizedMessage(), "Error During the Update");
                     }
