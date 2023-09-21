@@ -10,7 +10,7 @@ import java.util.ArrayList;
 
 import static com.intellij.openapi.actionSystem.CommonDataKeys.VIRTUAL_FILE;
 import static com.intellij.openapi.ui.Messages.showErrorDialog;
-import static com.intellij.ui.content.ContentFactory.SERVICE.getInstance;
+import static com.intellij.ui.content.ContentFactory.getInstance;
 import static com.tecknobit.dotdb.dotDbWindow.dotDbContent;
 import static com.tecknobit.dotdb.dotDbWindow.toolWindow;
 import static java.util.List.of;

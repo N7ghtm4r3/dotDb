@@ -1,7 +1,7 @@
 <idea-plugin>
 
     <id>com.tecknobit.dotDb</id>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <!--suppress PluginXmlCapitalization -->
     <name>dotDb</name>
     <vendor email="infotecknobitcompany@gmail.com" url="https://github.com/N7ghtm4r3">Tecknobit</vendor>
@@ -32,6 +32,13 @@
                 </li>
                 <li>
                     Added the DETACH button to clear the current window
+                </li>
+            </ul>
+            <h1>v. 1.0.2</h1><br>
+            In this version
+            <ul>
+                <li>
+                    The deprecated usages has been removed
                 </li>
             </ul>
         ]]>
